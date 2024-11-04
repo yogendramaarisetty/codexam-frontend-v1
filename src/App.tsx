@@ -2,66 +2,81 @@ import { useState } from 'react';
 import { Editor } from '@monaco-editor/react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/components/ui/use-toast';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Play, Terminal } from 'lucide-react';
+import { ChevronDown, ChevronUp, Play, Terminal } from 'lucide-react';
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
+import defaultCodes from './defaultCodes';
 
-const LANGUAGES = [
-  { id: 'javascript', name: 'JavaScript', extension: 'js' },
-  { id: 'python', name: 'Python', extension: 'py' },
-  { id: 'java', name: 'Java', extension: 'java' },
-  { id: 'cpp', name: 'C++', extension: 'cpp' },
-  { id: 'typescript', name: 'TypeScript', extension: 'ts' },
-];
+const LANGUAGES = defaultCodes;
 
-const DEFAULT_CODE = `// Write your code here
-function solution(input) {
-  return input;
-}`;
-
-function App() {
+export default function Component() {
   const [language, setLanguage] = useState(LANGUAGES[0].id);
-  const [code, setCode] = useState(DEFAULT_CODE);
-  const [output, setOutput] = useState('');
+  const [code, setCode] = useState(LANGUAGES[0].defaultCode);
+  const [output, setOutput] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
-  const { toast } = useToast();
+  const [isOutputCollapsed, setIsOutputCollapsed] = useState(false);
 
   const handleRunCode = async () => {
     setIsRunning(true);
+
+    const url = 'https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=false&wait=true&fields=*';
+    const options = {
+      method: 'POST',
+      headers: {
+        'x-rapidapi-key': 'cf4305d31bmsh82518687544739ep179fd2jsnf6d65d6ee270',
+        'x-rapidapi-host': 'judge0-ce.p.rapidapi.com',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        language_id: 71,
+        source_code: code,
+        stdin: 'SnVkZ2Uw'
+      }),
+    };
+
     try {
-      // Replace with your actual judge API endpoint
-      const response = await fetch('https://api.judge0.com/submissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          source_code: code,
-          language_id: language,
-        }),
-      });
+      const response = await fetch(url, options);
+      const result = await response.text();
 
-      if (!response.ok) throw new Error('Failed to execute code');
-
-      const result = await response.json();
-      setOutput(result.output || 'Code executed successfully!');
-      toast({
-        title: 'Success',
-        description: 'Code executed successfully!',
-      });
+      setOutput(result || 'Code executed successfully!');
+      console.log(result);
     } catch (error) {
-      setOutput('Error executing code. Please try again.');
-      toast({
-        title: 'Error',
-        description: 'Failed to execute code. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
+      console.error(error);
+      setOutput(`Error executing code. Please try again.${error}`);
+    }
+    finally {
       setIsRunning(false);
+    }
+  };
+
+  const toggleOutputCollapse = () => {
+    setIsOutputCollapsed(!isOutputCollapsed);
+    const bottomPane = document.querySelector('.bottom-pane');
+    // if (bottomPane) {
+    //   if (!isOutputCollapsed) {
+    //     // Collapse
+    //     bottomPane.setAttribute('data-state', 'collapsed');
+    //     bottomPane.style.flexGrow = '0';
+    //     bottomPane.style.flexBasis = '10%'; // 8% of 400px (typical panel height)
+    //   } else {
+    //     // Expand
+    //     bottomPane.setAttribute('data-state', 'expanded');
+    //     bottomPane.style.flexGrow = '1';
+    //     bottomPane.style.flexBasis = '30%'; // 30% of 400px (typical panel height)
+    //   }
+    // }
+  };
+
+  const handleLanguageChange = (newLanguage: string) => {
+    setLanguage(newLanguage);
+    const selectedLanguage = LANGUAGES.find(lang => lang.id === newLanguage);
+    if (selectedLanguage) {
+      setCode(selectedLanguage.defaultCode);
     }
   };
 
@@ -105,13 +120,13 @@ function App() {
 
           <ResizableHandle />
 
-          <ResizablePanel defaultSize={60}>
+          <ResizablePanel defaultSize={60} minSize={40}>
             <ResizablePanelGroup direction="vertical">
               <ResizablePanel defaultSize={70}>
                 <Card className="h-full rounded-none border-0">
                   <div className="border-b p-4">
                     <div className="flex items-center justify-between">
-                      <Select value={language} onValueChange={setLanguage}>
+                      <Select value={language} onValueChange={handleLanguageChange}>
                         <SelectTrigger className="w-[180px]">
                           <SelectValue placeholder="Select language" />
                         </SelectTrigger>
@@ -123,14 +138,6 @@ function App() {
                           ))}
                         </SelectContent>
                       </Select>
-                      <Button
-                        onClick={handleRunCode}
-                        disabled={isRunning}
-                        className="gap-2"
-                      >
-                        <Play className="h-4 w-4" />
-                        {isRunning ? 'Running...' : 'Run Code'}
-                      </Button>
                     </div>
                   </div>
                   <div className="h-[calc(100%-4rem)]">
@@ -160,13 +167,45 @@ function App() {
 
               <ResizableHandle />
 
-              <ResizablePanel defaultSize={30}>
+              <ResizablePanel
+                defaultSize={30}
+                collapsible={true}
+                collapsedSize={8}
+                minSize={10}
+                className='bottom-pane'
+                onCollapse={() => setIsOutputCollapsed(true)}
+                onExpand={() => setIsOutputCollapsed(false)}
+              >
                 <Card className="h-full rounded-none border-0">
-                  <div className="border-b p-4 flex items-center gap-2">
-                    <Terminal className="h-4 w-4" />
-                    <span className="font-semibold">Output</span>
+                  <div className="border-b p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Terminal className="h-4 w-4" />
+                      <span className="font-semibold">Output</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={handleRunCode}
+                        disabled={isRunning}
+                        className="gap-2"
+                      >
+                        <Play className="h-4 w-4" />
+                        {isRunning ? 'Running...' : 'Run Code'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => toggleOutputCollapse()}
+                        aria-label={isOutputCollapsed ? "Expand output" : "Collapse output"}
+                      >
+                        {isOutputCollapsed ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
-                  <ScrollArea className="h-[calc(100%-4rem)]">
+                  <ScrollArea className={`transition-all duration-300 ease-in-out ${isOutputCollapsed ? 'h-0' : 'h-[calc(100%-4rem)]'}`}>
                     <pre className="font-mono p-4 whitespace-pre-wrap">
                       {output || 'Run your code to see the output here'}
                     </pre>
@@ -180,5 +219,3 @@ function App() {
     </div>
   );
 }
-
-export default App;
